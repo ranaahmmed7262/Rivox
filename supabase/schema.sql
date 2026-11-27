@@ -106,3 +106,12 @@ grant select, update on public.profiles to authenticated;
 grant select, insert on public.conversations to authenticated;
 grant select, insert on public.conversation_members to authenticated;
 grant select, insert on public.messages to authenticated;
+
+
+-- Enable live message updates for subscribed clients.
+do $$
+begin
+  alter publication supabase_realtime add table public.messages;
+exception
+  when duplicate_object then null;
+end $$;
