@@ -145,3 +145,85 @@ create policy "Call participants can update call signaling" on public.call_sessi
   with check (caller_id = (select auth.uid()) or callee_id = (select auth.uid()));
 grant select, insert, update on public.call_sessions to authenticated;
 do $$ begin alter publication supabase_realtime add table public.call_sessions; exception when duplicate_object then null; end $$;
+
+
+-- Privacy hardening applied to the live project on 2026-11-27.
+-- Keep membership authorization helper outside the exposed public API schema.
+create schema if not exists private;
+revoke all on schema private from public, anon;
+grant usage on schema private to authenticated;
+
+create or replace function private.is_conversation_member(target_conversation_id uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $$
+  select exists (
+    select 1 from public.conversation_members cm
+    where cm.conversation_id = target_conversation_id
+      and cm.user_id = (select auth.uid())
+  );
+$$;
+revoke all on function private.is_conversation_member(uuid) from public, anon;
+grant execute on function private.is_conversation_member(uuid) to authenticated;
+
+drop policy if exists "Members can view conversations" on public.conversations;
+create policy "Members can view conversations" on public.conversations
+  for select to authenticated using (private.is_conversation_member(id));
+drop policy if exists "Members can view conversation membership" on public.conversation_members;
+create policy "Members can view conversation membership" on public.conversation_members
+  for select to authenticated using (private.is_conversation_member(conversation_id));
+drop policy if exists "Members can read messages" on public.messages;
+create policy "Members can read messages" on public.messages
+  for select to authenticated using (private.is_conversation_member(conversation_id));
+drop policy if exists "Members can send messages as themselves" on public.messages;
+create policy "Members can send messages as themselves" on public.messages
+  for insert to authenticated with check (
+    sender_id = (select auth.uid())
+    and private.is_conversation_member(conversation_id)
+  );
+
+-- Trigger-only function must not be exposed as an RPC.
+revoke all on function public.handle_new_rivox_user() from public, anon, authenticated;
+revoke all on function public.is_conversation_member(uuid) from public, anon, authenticated;
+
+-- Prevent call participants from changing immutable identities or forging
+-- signaling fields/status transitions belonging to the other participant.
+create or replace function private.guard_call_session_update()
+returns trigger language plpgsql security invoker set search_path = ''
+as $$
+declare actor uuid := (select auth.uid());
+begin
+  if actor is null or (actor <> old.caller_id and actor <> old.callee_id) then
+    raise exception 'Not a call participant';
+  end if;
+  if new.id is distinct from old.id
+     or new.conversation_id is distinct from old.conversation_id
+     or new.caller_id is distinct from old.caller_id
+     or new.callee_id is distinct from old.callee_id
+     or new.call_type is distinct from old.call_type
+     or new.created_at is distinct from old.created_at then
+    raise exception 'Call participants and call identity are immutable';
+  end if;
+  if actor = old.caller_id then
+    if new.answer is distinct from old.answer then
+      raise exception 'Only the callee may submit the call answer';
+    end if;
+    if new.status not in (old.status, 'ended', 'missed') then
+      raise exception 'Caller cannot set this call status';
+    end if;
+  else
+    if new.offer is distinct from old.offer then
+      raise exception 'Only the caller may submit the call offer';
+    end if;
+    if new.status not in (old.status, 'accepted', 'rejected', 'ended') then
+      raise exception 'Callee cannot set this call status';
+    end if;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+revoke all on function private.guard_call_session_update() from public, anon, authenticated;
+drop trigger if exists guard_call_session_update on public.call_sessions;
+create trigger guard_call_session_update
+  before update on public.call_sessions
+  for each row execute function private.guard_call_session_update();
