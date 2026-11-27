@@ -115,3 +115,33 @@ begin
 exception
   when duplicate_object then null;
 end $$;
+
+
+-- Call signaling foundation. Media transport still requires a WebRTC client and TURN service.
+create table if not exists public.call_sessions (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  caller_id uuid not null references auth.users(id) on delete cascade,
+  callee_id uuid not null references auth.users(id) on delete cascade,
+  call_type text not null check (call_type in ('audio','video')),
+  status text not null default 'ringing' check (status in ('ringing','accepted','rejected','ended','missed')),
+  offer jsonb, answer jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint call_distinct_participants check (caller_id <> callee_id)
+);
+create index if not exists call_sessions_callee_created_idx on public.call_sessions(callee_id, created_at desc);
+alter table public.call_sessions enable row level security;
+create policy "Call participants can view their calls" on public.call_sessions
+  for select to authenticated using (caller_id = (select auth.uid()) or callee_id = (select auth.uid()));
+create policy "Conversation members can start calls" on public.call_sessions
+  for insert to authenticated with check (
+    caller_id = (select auth.uid())
+    and exists (select 1 from public.conversation_members cm where cm.conversation_id = call_sessions.conversation_id and cm.user_id = (select auth.uid()))
+    and exists (select 1 from public.conversation_members cm where cm.conversation_id = call_sessions.conversation_id and cm.user_id = callee_id)
+  );
+create policy "Call participants can update call signaling" on public.call_sessions
+  for update to authenticated using (caller_id = (select auth.uid()) or callee_id = (select auth.uid()))
+  with check (caller_id = (select auth.uid()) or callee_id = (select auth.uid()));
+grant select, insert, update on public.call_sessions to authenticated;
+do $$ begin alter publication supabase_realtime add table public.call_sessions; exception when duplicate_object then null; end $$;
