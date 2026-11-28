@@ -1,0 +1,32 @@
+name: Publish RIVOX OTA Update
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "App.tsx"
+      - "components/**"
+      - "lib/**"
+      - "assets/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Publish compatible preview update
+        run: npx eas-cli@latest update --channel preview --message "RIVOX OTA update ${GITHUB_SHA}" --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

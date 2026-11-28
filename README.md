@@ -2,64 +2,53 @@
 
 **Your Voice, Beyond Borders.**
 
-RIVOX is an Android-first communication app built with Expo React Native and Supabase.
+RIVOX is an Android-first communication app built with Expo React Native, Supabase, and LiveKit.
 
-## Current status
+## Current implementation
 
-- [x] Expo React Native Android project scaffold
-- [x] RIVOX dark-theme interface
-- [x] Dedicated Supabase project and initial database schema
-- [x] Email/password sign-up and sign-in screens
-- [x] Persistent Supabase auth session on mobile
-- [x] Automatic RIVOX ID/profile creation on account registration
+- [x] Expo React Native Android project scaffold and dark theme
+- [x] Supabase email/password authentication and persistent sessions
+- [x] Automatic RIVOX ID/profile creation
 - [x] User directory search by display name or RIVOX ID
-- [x] One-to-one conversation creation
-- [x] Message send/read and realtime message subscription code
-- [ ] End-to-end/device testing of registration and chat
-- [ ] Presence, typing indicators, attachments, blocking and reporting
-- [ ] WebRTC audio calling
-- [ ] WebRTC video calling
-- [ ] Call signaling, incoming-call notifications and TURN relay
-- [ ] Cloud APK build and installation test
-- [ ] Production security and privacy review
+- [x] One-to-one conversations and realtime message subscriptions
+- [x] LiveKit audio/video calling UI and authenticated token Edge Function
+- [x] Call signaling with incoming in-app accept/reject controls
+- [x] Android APK build through EAS Build
+- [x] EAS Update configuration for compatible JavaScript/UI updates
+- [x] GitHub Actions workflow to publish preview-channel OTA updates from main
+
+## OTA updates
+
+The app uses Expo Updates with runtime version policy `appVersion` and the EAS project configured in `app.json`.
+
+Changes to JavaScript and UI files under `App.tsx`, `components/`, `lib/`, and `assets/` are published to the `preview` channel automatically after they reach `main`. Installed preview builds check for updates when launched; a downloaded update is applied on the next app restart.
+
+Native changes (new native modules, permissions, Expo config plugins, Android/iOS configuration, or native dependency changes) require a new EAS build and installation. Increase the app version when intentionally changing the native runtime so incompatible OTA updates cannot be applied.
+
+The current already-built APK predates this Expo Updates configuration. Install the first APK built from this configuration once to enable OTA updates on that device.
 
 ## Supabase setup
 
-The dedicated RIVOX project is configured in `lib/supabase.ts` with its project URL and publishable client key. The database migration has been applied. The matching schema is documented in [supabase/schema.sql](./supabase/schema.sql).
-
-The mobile app uses the Supabase publishable key only; never put a service-role key in the app. Database tables are protected by Row Level Security.
-
-## Run locally
-
-```bash
-npm install
-npx expo install --fix
-npx expo start
-```
-
-For an installable Android APK, use the EAS preview profile:
-
-```bash
-npx eas-cli login
-npx eas-cli build --platform android --profile preview
-```
-
-See the [Expo APK build guide](https://docs.expo.dev/build-reference/apk/).
-
-## Important
-
-Chat implementation has been added but still needs real-device testing with two separate accounts. Audio/video calling is not implemented yet. Camera and microphone permission declarations alone do not enable calls. The calling layer requires WebRTC, authenticated call signaling, STUN/TURN infrastructure, incoming-call notifications, and real-device network testing.
-
-## LiveKit calling integration
-
-The calling branch adds audio/video call controls, incoming-call accept/reject prompts, LiveKit room UI, mic/camera controls, and an authenticated `livekit-token` Edge Function.
+The mobile app uses the Supabase publishable key only. Never put a service-role key or LiveKit API secret in the Android app or GitHub.
 
 Configure these server-only secrets in Supabase Dashboard → Project Settings → Edge Functions → Secrets:
 
-- `LIVEKIT_URL` (the project's `wss://` URL)
+- `LIVEKIT_URL`
 - `LIVEKIT_API_KEY`
 - `LIVEKIT_API_SECRET`
 
-Never put the LiveKit API secret in the Android app or GitHub. The token function validates the signed-in Supabase user and checks call-session participation before issuing a short-lived room token.
+The `livekit-token` Edge Function validates the signed-in Supabase user and call-session participation before issuing a short-lived LiveKit room token.
 
-LiveKit uses native WebRTC and does not work in Expo Go. Install dependencies and create a new EAS APK after adding the LiveKit Expo plugins. Real-device tests with two separate RIVOX accounts are still required. Push notifications for background incoming calls are not yet implemented.
+## Build
+
+Use the EAS preview profile for an installable APK:
+
+```bash
+npx eas-cli@latest build --platform android --profile preview
+```
+
+The production profile creates an Android App Bundle for Google Play.
+
+## Testing still required
+
+Real-device testing with two separate RIVOX accounts is required for registration, messaging, audio/video calls, network changes, and OTA delivery. Background push notifications, attachments, group messaging/calling, presence, blocking/reporting, and production privacy/security review remain future work.

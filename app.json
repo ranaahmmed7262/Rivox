@@ -6,6 +6,15 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "scheme": "rivox",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/3a9aea9d-8037-407b-a656-5cfc7aff90b2",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "android": {
       "package": "com.rivox.app",
       "versionCode": 1,
@@ -25,7 +34,13 @@
           }
         }
       ],
-      "@config-plugins/react-native-webrtc"
-    ]
+      "@config-plugins/react-native-webrtc",
+      "expo-updates"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3a9aea9d-8037-407b-a656-5cfc7aff90b2"
+      }
+    }
   }
 }
