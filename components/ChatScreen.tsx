@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import CallScreen from './CallScreen';
+import ProfileScreen from './ProfileScreen';
 import { RivoxCall, RivoxCallType, startRivoxCall, updateRivoxCallStatus } from '../lib/calls';
 
 type Profile = { id: string; display_name: string; rivox_id: string };
@@ -23,6 +24,7 @@ export default function ChatScreen({ userId, onSignOut }: { userId: string; onSi
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeCall, setActiveCall] = useState<RivoxCall | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   const loadThreads = useCallback(async () => {
     const { data: memberships, error } = await supabase
@@ -167,6 +169,8 @@ export default function ChatScreen({ userId, onSignOut }: { userId: string; onSi
     return q && ((p.display_name || '').toLowerCase().includes(q) || p.rivox_id.toLowerCase().includes(q));
   });
 
+  if (showProfile) return <ProfileScreen userId={userId} onBack={() => setShowProfile(false)} />;
+
   if (activeCall) return <CallScreen call={activeCall} displayName={active?.person.display_name || 'RIVOX User'} onClose={() => setActiveCall(null)} />;
 
   if (active) return (
@@ -208,7 +212,7 @@ export default function ChatScreen({ userId, onSignOut }: { userId: string; onSi
       <StatusBar barStyle="light-content" backgroundColor="#090B18" />
       <View style={styles.header}>
         <View><Text style={styles.brand}>RIVOX</Text><Text style={styles.tagline}>Your Voice, Beyond Borders.</Text></View>
-        <TouchableOpacity onPress={onSignOut}><Text style={styles.signOut}>Sign out</Text></TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 14 }}><TouchableOpacity onPress={() => setShowProfile(true)}><Text style={styles.signOut}>Profile</Text></TouchableOpacity><TouchableOpacity onPress={onSignOut}><Text style={styles.signOut}>Sign out</Text></TouchableOpacity></View>
       </View>
       <Text style={styles.heading}>Messages</Text>
       <TextInput value={search} onChangeText={setSearch} placeholder="Find by name or RIVOX ID" placeholderTextColor="#777B91" style={styles.search} autoCapitalize="none" />

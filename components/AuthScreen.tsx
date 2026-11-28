@@ -1,98 +1,14 @@
 import React, { useState } from 'react';
-import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet,
-  Text, TextInput, TouchableOpacity, View,
-} from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../lib/supabase';
-
-const accent = '#6C63FF';
-
-export default function AuthScreen() {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function submit() {
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !/^\S+@\S+\.\S+$/.test(cleanEmail)) {
-      Alert.alert('Check your email', 'Enter a valid email address.');
-      return;
-    }
-    if (password.length < 6) {
-      Alert.alert('Password too short', 'Use at least 6 characters.');
-      return;
-    }
-    if (mode === 'signup' && !name.trim()) {
-      Alert.alert('Name required', 'Enter your display name.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      if (mode === 'signup') {
-        const { data, error } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password,
-          options: { data: { display_name: name.trim() } },
-        });
-        if (error) throw error;
-        if (!data.session) {
-          Alert.alert('Verify your email', 'Your RIVOX account has been created. Check your inbox and verify your email, then sign in.');
-        }
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
-        if (error) throw error;
-      }
-    } catch (error) {
-      Alert.alert('RIVOX', error instanceof Error ? error.message : 'Something went wrong. Please try again.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.brandMark}><Text style={styles.brandMarkText}>R</Text></View>
-      <Text style={styles.brand}>RIVOX</Text>
-      <Text style={styles.tagline}>Your Voice, Beyond Borders.</Text>
-      <View style={styles.card}>
-        <Text style={styles.title}>{mode === 'signin' ? 'Welcome back' : 'Create your account'}</Text>
-        <Text style={styles.subtitle}>{mode === 'signin' ? 'Sign in to continue to RIVOX' : 'Join RIVOX and stay connected'}</Text>
-        {mode === 'signup' && (
-          <TextInput value={name} onChangeText={setName} placeholder="Your name" placeholderTextColor="#8589A0" style={styles.input} autoCapitalize="words" />
-        )}
-        <TextInput value={email} onChangeText={setEmail} placeholder="Email address" placeholderTextColor="#8589A0" style={styles.input} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
-        <TextInput value={password} onChangeText={setPassword} placeholder="Password (min. 6 characters)" placeholderTextColor="#8589A0" style={styles.input} secureTextEntry autoCapitalize="none" />
-        <TouchableOpacity onPress={submit} disabled={busy} style={[styles.primary, busy && { opacity: 0.65 }]}>
-          {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{mode === 'signin' ? 'Sign In' : 'Create Account'}</Text>}
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setMode(mode === 'signin' ? 'signup' : 'signin')} style={styles.switch}>
-          <Text style={styles.switchText}>{mode === 'signin' ? "New to RIVOX? " : 'Already have an account? '}
-            <Text style={styles.switchAccent}>{mode === 'signin' ? 'Create account' : 'Sign in'}</Text>
-          </Text>
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.footer}>SECURE CONNECTIONS • RIVOX</Text>
-    </KeyboardAvoidingView>
-  );
+const countries=[{label:'🇴🇲 Oman +968',code:'+968'},{label:'🇧🇩 Bangladesh +880',code:'+880'},{label:'🇦🇪 UAE +971',code:'+971'},{label:'🇸🇦 Saudi Arabia +966',code:'+966'},{label:'🇮🇳 India +91',code:'+91'},{label:'🇵🇰 Pakistan +92',code:'+92'},{label:'🇬🇧 UK +44',code:'+44'},{label:'🇺🇸 USA +1',code:'+1'}];
+export default function AuthScreen({recoveryMode=false,onRecoveryComplete}:{recoveryMode?:boolean;onRecoveryComplete?:()=>void}){
+ const [mode,setMode]=useState<'signin'|'signup'>('signin'),[method,setMethod]=useState<'email'|'phone'>('email'),[country,setCountry]=useState(0),[name,setName]=useState(''),[email,setEmail]=useState(''),[phone,setPhone]=useState(''),[password,setPassword]=useState(''),[newPassword,setNewPassword]=useState(''),[confirmPassword,setConfirmPassword]=useState(''),[otp,setOtp]=useState(''),[pending,setPending]=useState(false),[busy,setBusy]=useState(false);
+ const number=countries[country].code+phone.replace(/\D/g,'');
+ async function finishRecovery(){if(newPassword.length<8||newPassword!==confirmPassword){Alert.alert('Password','Enter matching passwords with at least 8 characters.');return;}setBusy(true);try{const {error}=await supabase.auth.updateUser({password:newPassword});if(error)throw error;Alert.alert('Password updated','Your password has been reset. Please sign in again.');await supabase.auth.signOut();onRecoveryComplete?.();}catch(e){Alert.alert('RIVOX',e instanceof Error?e.message:'Could not reset password.');}finally{setBusy(false);}}
+ async function submit(){if(password.length<8){Alert.alert('Password','Use at least 8 characters.');return;}if(mode==='signup'&&!name.trim()){Alert.alert('Name','Enter your name.');return;}if(method==='email'&&!/^\S+@\S+\.\S+$/.test(email.trim())){Alert.alert('Email','Enter a valid email.');return;}if(method==='phone'&&phone.replace(/\D/g,'').length<6){Alert.alert('Phone','Enter your mobile number.');return;}setBusy(true);try{if(mode==='signup'){const options={data:{display_name:name.trim(),country_code:method==='phone'?countries[country].code:null}};const {data,error}=method==='email'?await supabase.auth.signUp({email:email.trim().toLowerCase(),password,options:{data:{display_name:name.trim()}}}):await supabase.auth.signUp({phone:number,password,options});if(error)throw error;if(!data.session&&method==='phone'){setPending(true);Alert.alert('Verify phone','Enter the SMS code sent to you.');}else if(!data.session)Alert.alert('Verify email','Check your inbox to confirm your RIVOX account.');}else{const {error}=method==='email'?await supabase.auth.signInWithPassword({email:email.trim().toLowerCase(),password}):await supabase.auth.signInWithPassword({phone:number,password});if(error)throw error;}}catch(e){Alert.alert('RIVOX',e instanceof Error?e.message:'Please try again.');}finally{setBusy(false);}}
+ async function recover(){if(!email.trim()){Alert.alert('Recovery','Enter your email address first.');return;}setBusy(true);try{const {error}=await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(),{redirectTo:'rivox://reset-password'});if(error)throw error;Alert.alert('Email sent','Use the secure recovery link in your inbox.');}catch(e){Alert.alert('RIVOX',e instanceof Error?e.message:'Could not send email.');}finally{setBusy(false);}}
+ async function verify(){setBusy(true);try{const {error}=await supabase.auth.verifyOtp({phone:number,token:otp.trim(),type:'sms'});if(error)throw error;setPending(false);}catch(e){Alert.alert('Verification',e instanceof Error?e.message:'Invalid code.');}finally{setBusy(false);}}
+ return <KeyboardAvoidingView style={s.screen} behavior={Platform.OS==='ios'?'padding':undefined}><Text style={s.brand}>RIVOX</Text><Text style={s.tag}>Your Voice, Beyond Borders.</Text><View style={s.card}><Text style={s.title}>{recoveryMode?'Reset your password':pending?'Verify phone':mode==='signin'?'Welcome back':'Create account'}</Text>{recoveryMode?<><TextInput value={newPassword} onChangeText={setNewPassword} placeholder="New password (8+ characters)" placeholderTextColor="#8589A0" secureTextEntry style={s.input}/><TextInput value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirm new password" placeholderTextColor="#8589A0" secureTextEntry style={s.input}/><TouchableOpacity style={s.primary} onPress={finishRecovery} disabled={busy}>{busy?<ActivityIndicator color="#fff"/>:<Text style={s.white}>Save New Password</Text>}</TouchableOpacity></>:!pending&&<><View style={s.row}><TouchableOpacity onPress={()=>setMethod('email')} style={s.tab}><Text style={s.white}>Email</Text></TouchableOpacity><TouchableOpacity onPress={()=>setMethod('phone')} style={s.tab}><Text style={s.white}>Phone</Text></TouchableOpacity></View>{mode==='signup'&&<TextInput value={name} onChangeText={setName} placeholder="Your name" placeholderTextColor="#8589A0" style={s.input}/ >}{method==='email'?<TextInput value={email} onChangeText={setEmail} placeholder="Email address" placeholderTextColor="#8589A0" keyboardType="email-address" autoCapitalize="none" style={s.input}/>:<><TouchableOpacity style={s.input} onPress={()=>setCountry(x=>(x+1)%countries.length)}><Text style={s.white}>{countries[country].label}  ▾</Text></TouchableOpacity><TextInput value={phone} onChangeText={setPhone} placeholder="Mobile number" placeholderTextColor="#8589A0" keyboardType="phone-pad" style={s.input}/></>}<TextInput value={password} onChangeText={setPassword} placeholder="Password (8+ characters)" placeholderTextColor="#8589A0" secureTextEntry style={s.input}/></>}{!recoveryMode&&pending&&<TextInput value={otp} onChangeText={setOtp} placeholder="SMS code" placeholderTextColor="#8589A0" keyboardType="number-pad" style={s.input}/>} {!recoveryMode&&<TouchableOpacity style={s.primary} onPress={pending?verify:submit} disabled={busy}>{busy?<ActivityIndicator color="#fff"/>:<Text style={s.white}>{pending?'Verify':'Continue'}</Text>}</TouchableOpacity>}{!recoveryMode&&!pending&&mode==='signin'&&method==='email'&&<TouchableOpacity onPress={recover} style={{alignItems:'flex-end',marginTop:14}}><Text style={s.link}>Forgot password?</Text></TouchableOpacity>}{!recoveryMode&&<TouchableOpacity onPress={()=>{setPending(false);setMode(mode==='signin'?'signup':'signin')}} style={{marginTop:20,alignItems:'center'}}><Text style={s.link}>{mode==='signin'?'Create account':'Already registered? Sign in'}</Text></TouchableOpacity>}</View></KeyboardAvoidingView>;
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#090B18', justifyContent: 'center', padding: 24 },
-  brandMark: { alignSelf: 'center', width: 62, height: 62, borderRadius: 20, backgroundColor: '#29264E', borderWidth: 1, borderColor: accent, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  brandMarkText: { color: '#D5D1FF', fontSize: 34, fontWeight: '900' },
-  brand: { color: '#FFFFFF', fontSize: 28, fontWeight: '900', letterSpacing: 4, textAlign: 'center' },
-  tagline: { color: '#969BB5', fontSize: 12, textAlign: 'center', marginTop: 5, marginBottom: 30 },
-  card: { backgroundColor: '#121529', borderRadius: 22, borderWidth: 1, borderColor: '#292D49', padding: 22 },
-  title: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
-  subtitle: { color: '#969BB5', fontSize: 12, marginTop: 7, marginBottom: 20 },
-  input: { backgroundColor: '#0B0E1D', borderWidth: 1, borderColor: '#303450', color: '#FFFFFF', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14, marginBottom: 12, fontSize: 14 },
-  primary: { backgroundColor: accent, padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 5 },
-  primaryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  switch: { paddingTop: 20, alignItems: 'center' },
-  switchText: { color: '#A5A9BF', fontSize: 12 },
-  switchAccent: { color: '#B8B2FF', fontWeight: '800' },
-  footer: { color: '#555B75', fontSize: 9, textAlign: 'center', marginTop: 28, letterSpacing: 1.5 },
-});
+const s=StyleSheet.create({screen:{flex:1,backgroundColor:'#090B18',justifyContent:'center',padding:24},brand:{color:'#fff',fontSize:30,fontWeight:'900',letterSpacing:4,textAlign:'center'},tag:{color:'#969BB5',textAlign:'center',marginVertical:25},card:{backgroundColor:'#121529',borderRadius:20,padding:22,borderColor:'#292D49',borderWidth:1},title:{color:'#fff',fontSize:22,fontWeight:'800',marginBottom:18},input:{backgroundColor:'#0B0E1D',borderWidth:1,borderColor:'#303450',color:'#fff',borderRadius:12,padding:14,marginBottom:12},primary:{backgroundColor:'#6C63FF',padding:15,borderRadius:12,alignItems:'center'},white:{color:'#fff',fontWeight:'800'},link:{color:'#B8B2FF',fontWeight:'700'},row:{flexDirection:'row',justifyContent:'space-around',marginBottom:14},tab:{backgroundColor:'#393477',padding:10,borderRadius:8,flex:1,alignItems:'center',marginHorizontal:3}});
