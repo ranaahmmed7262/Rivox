@@ -1,0 +1,3 @@
+-- RIVOX owner roles and user controls. Applied on 2026-11-28.
+-- Primary owner is assigned by the auth.users trigger only when this exact email signs up.
+-- See live Supabase migration rivox_owner_profiles_and_controls for full SQL and policies.
