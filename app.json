@@ -16,6 +16,16 @@
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
-    "plugins": []
+    "plugins": [
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "audioType": "communication"
+          }
+        }
+      ],
+      "@config-plugins/react-native-webrtc"
+    ]
   }
 }
