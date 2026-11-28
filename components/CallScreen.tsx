@@ -9,6 +9,7 @@ import {
 } from '@livekit/react-native';
 import { Track } from 'livekit-client';
 import { getLiveKitCredentials, updateRivoxCallStatus, RivoxCall } from '../lib/calls';
+import { supabase } from '../lib/supabase';
 
 export default function CallScreen({
   call,
@@ -27,16 +28,44 @@ export default function CallScreen({
     AudioSession.startAudioSession().catch(error => {
       if (active) setLoadingError(error instanceof Error ? error.message : 'Could not start audio session.');
     });
-    getLiveKitCredentials(call.id)
-      .then(value => { if (active) setCredentials(value); })
-      .catch(error => {
-        if (!active) return;
-        const message = error instanceof Error ? error.message : 'Could not connect the call.';
-        setLoadingError(message);
-        Alert.alert('RIVOX Call', message, [{ text: 'OK', onPress: onClose }]);
-      });
+    let started = false;
+    let statusChannel: ReturnType<typeof supabase.channel> | undefined;
+    const connect = () => {
+      if (started) return;
+      started = true;
+      getLiveKitCredentials(call.id)
+        .then(value => { if (active) setCredentials(value); })
+        .catch(error => {
+          if (!active) return;
+          const message = error instanceof Error ? error.message : 'Could not connect the call.';
+          setLoadingError(message);
+          Alert.alert('RIVOX Call', message, [{ text: 'OK', onPress: onClose }]);
+        });
+    };
+    supabase.auth.getUser().then(({ data }) => {
+      if (!active) return;
+      if (data.user?.id === call.caller_id && call.status === 'ringing') {
+        statusChannel = supabase.channel('rivox-call-status-' + call.id)
+          .on('postgres_changes', {
+            event: 'UPDATE', schema: 'public', table: 'call_sessions',
+            filter: 'id=eq.' + call.id,
+          }, payload => {
+            const status = payload.new.status;
+            if (status === 'accepted') connect();
+            if (['rejected', 'ended', 'missed'].includes(status)) {
+              setLoadingError('The call was not accepted.');
+              onClose();
+            }
+          }).subscribe();
+      } else {
+        connect();
+      }
+    }).catch(error => {
+      if (active) setLoadingError(error instanceof Error ? error.message : 'Could not verify your account.');
+    });
     return () => {
       active = false;
+      if (statusChannel) supabase.removeChannel(statusChannel);
       AudioSession.stopAudioSession().catch(() => {});
     };
   }, [call.id]);
@@ -67,7 +96,7 @@ export default function CallScreen({
           <View style={styles.voiceCenter}>
             <View style={styles.avatar}><Text style={styles.avatarText}>{(displayName || 'R').charAt(0).toUpperCase()}</Text></View>
             <Text style={styles.voiceName}>{displayName || 'RIVOX User'}</Text>
-            <Text style={styles.status}>Connected to secure call room</Text>
+            <Text style={styles.status}>{credentials ? 'Connected to secure call room' : 'Calling… waiting for answer'}</Text>
           </View>
         )}
         <RoomAudioRenderer />
