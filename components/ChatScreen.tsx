@@ -4,6 +4,8 @@ import {
   SafeAreaView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
+import CallScreen from './CallScreen';
+import { RivoxCall, RivoxCallType, startRivoxCall, updateRivoxCallStatus } from '../lib/calls';
 
 type Profile = { id: string; display_name: string; rivox_id: string };
 type Message = { id: string; conversation_id: string; sender_id: string; body: string; created_at: string };
@@ -20,6 +22,7 @@ export default function ChatScreen({ userId, onSignOut }: { userId: string; onSi
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [activeCall, setActiveCall] = useState<RivoxCall | null>(null);
 
   const loadThreads = useCallback(async () => {
     const { data: memberships, error } = await supabase
@@ -72,6 +75,20 @@ export default function ChatScreen({ userId, onSignOut }: { userId: string; onSi
   }, [loadThreads, loadContacts]);
 
   useEffect(() => {
+    const channel = supabase.channel('rivox-incoming-calls-' + userId)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'call_sessions', filter: 'callee_id=eq.' + userId }, async payload => {
+        const call = payload.new as RivoxCall;
+        if (call.status !== 'ringing' || activeCall) return;
+        const { data: caller } = await supabase.from('profiles').select('display_name').eq('id', call.caller_id).maybeSingle();
+        Alert.alert('Incoming RIVOX call', (caller?.display_name || 'A RIVOX user') + ' is calling you.', [
+          { text: 'Reject', style: 'destructive', onPress: () => updateRivoxCallStatus(call.id, 'rejected').catch(e => Alert.alert('RIVOX', e.message)) },
+          { text: 'Accept', onPress: () => updateRivoxCallStatus(call.id, 'accepted').then(() => setActiveCall(call)).catch(e => Alert.alert('RIVOX', e.message)) },
+        ], { cancelable: false });
+      }).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [userId, activeCall]);
+
+  useEffect(() => {
     if (!active) return;
     let alive = true;
     supabase.from('messages').select('*').eq('conversation_id', active.id)
@@ -116,6 +133,17 @@ export default function ChatScreen({ userId, onSignOut }: { userId: string; onSi
     } finally { setBusy(false); }
   }
 
+  async function beginCall(callType: RivoxCallType) {
+    if (!active || busy || activeCall) return;
+    setBusy(true);
+    try {
+      const call = await startRivoxCall(active.id, active.person.id, callType);
+      setActiveCall(call);
+    } catch (error) {
+      Alert.alert('Could not start call', error instanceof Error ? error.message : 'Please try again.');
+    } finally { setBusy(false); }
+  }
+
   async function sendMessage() {
     const body = draft.trim();
     if (!body || !active || busy) return;
@@ -139,6 +167,8 @@ export default function ChatScreen({ userId, onSignOut }: { userId: string; onSi
     return q && ((p.display_name || '').toLowerCase().includes(q) || p.rivox_id.toLowerCase().includes(q));
   });
 
+  if (activeCall) return <CallScreen call={activeCall} displayName={active?.person.display_name || 'RIVOX User'} onClose={() => setActiveCall(null)} />;
+
   if (active) return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#090B18" />
@@ -150,6 +180,8 @@ export default function ChatScreen({ userId, onSignOut }: { userId: string; onSi
           <Text style={styles.personName}>{active.person.display_name || 'RIVOX User'}</Text>
           <Text style={styles.personId}>{active.person.rivox_id}</Text>
         </View>
+        <TouchableOpacity style={styles.callButton} onPress={() => beginCall('audio')} disabled={busy}><Text style={styles.callButtonText}>Voice</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.callButton} onPress={() => beginCall('video')} disabled={busy}><Text style={styles.callButtonText}>Video</Text></TouchableOpacity>
       </View>
       <FlatList
         style={{ flex: 1 }} contentContainerStyle={styles.messageList}
@@ -233,6 +265,8 @@ const styles = StyleSheet.create({
   footer: { color: '#555B75', fontSize: 9, fontWeight: '800', letterSpacing: 1.5, textAlign: 'center', paddingVertical: 15 },
   chatHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#202238' },
   back: { color: '#B8B2FF', fontWeight: '700', fontSize: 14 },
+  callButton: { backgroundColor: '#252943', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9, marginLeft: 6 },
+  callButtonText: { color: '#D5D1FF', fontSize: 10, fontWeight: '800' },
   messageList: { paddingVertical: 16, flexGrow: 1, justifyContent: 'flex-end' },
   bubble: { maxWidth: '82%', borderRadius: 16, padding: 12, marginVertical: 5 },
   myBubble: { alignSelf: 'flex-end', backgroundColor: '#393477', borderBottomRightRadius: 4 },

@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StatusBar, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
+import { registerGlobals } from '@livekit/react-native';
 import AuthScreen from './components/AuthScreen';
 import ChatScreen from './components/ChatScreen';
 import { supabase } from './lib/supabase';
+
+registerGlobals();
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
