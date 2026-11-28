@@ -39,7 +39,7 @@ export default function App() {
     </View>;
   }
 
-  if (!session) return <><StatusBar barStyle="light-content" backgroundColor="#090B18" /><AuthScreen recoveryMode={recoveryMode} /></>;
+  if (recoveryMode || !session) return <><StatusBar barStyle="light-content" backgroundColor="#090B18" /><AuthScreen recoveryMode={recoveryMode} onRecoveryComplete={() => setRecoveryMode(false)} /></>;
 
   return <ChatScreen key={session.user.id} userId={session.user.id} onSignOut={async () => {
     const { error } = await supabase.auth.signOut();
