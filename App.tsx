@@ -11,6 +11,7 @@ registerGlobals();
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -20,7 +21,8 @@ export default function App() {
       setSession(data.session);
       setLoading(false);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
       setSession(nextSession);
     });
     return () => {
@@ -37,7 +39,7 @@ export default function App() {
     </View>;
   }
 
-  if (!session) return <><StatusBar barStyle="light-content" backgroundColor="#090B18" /><AuthScreen /></>;
+  if (!session) return <><StatusBar barStyle="light-content" backgroundColor="#090B18" /><AuthScreen recoveryMode={recoveryMode} /></>;
 
   return <ChatScreen key={session.user.id} userId={session.user.id} onSignOut={async () => {
     const { error } = await supabase.auth.signOut();
