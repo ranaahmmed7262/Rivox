@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StatusBar, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, StatusBar, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { registerGlobals } from '@livekit/react-native';
 import AuthScreen from './components/AuthScreen';
@@ -14,6 +14,29 @@ export default function App() {
   const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
+    const handleRecoveryUrl = async (url: string) => {
+      if (!url.includes('type=recovery')) return;
+      try {
+        const parsed = new URL(url);
+        const params = new URLSearchParams(parsed.hash.replace(/^#/, ''));
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        if (accessToken && refreshToken) {
+          const { data, error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          if (error) throw error;
+          setSession(data.session);
+        } else {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(url);
+          if (error) throw error;
+          setSession(data.session);
+        }
+        setRecoveryMode(true);
+      } catch (error) {
+        Alert.alert('Password recovery', error instanceof Error ? error.message : 'Could not open recovery link.');
+      }
+    };
+    Linking.getInitialURL().then(url => { if (url) void handleRecoveryUrl(url); });
+    const urlListener = Linking.addEventListener('url', event => { void handleRecoveryUrl(event.url); });
     let alive = true;
     supabase.auth.getSession().then(({ data, error }) => {
       if (!alive) return;
@@ -28,6 +51,7 @@ export default function App() {
     return () => {
       alive = false;
       listener.subscription.unsubscribe();
+      urlListener.remove();
     };
   }, []);
 
