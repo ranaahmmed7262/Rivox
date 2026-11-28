@@ -85,3 +85,31 @@ create policy "Users can view active profiles" on public.profiles for select to 
 drop policy if exists "Members can send messages as themselves" on public.messages;
 drop policy if exists "Suspended users cannot send messages" on public.messages;
 create policy "Active members can send messages" on public.messages for insert to authenticated with check(sender_id=(select auth.uid()) and exists(select 1 from public.profiles p where p.id=(select auth.uid()) and p.account_status='active') and private.is_conversation_member(conversation_id));
+
+-- Suspend accounts at the data-access layer, not just in the UI.
+create or replace function private.is_active_rivox_user()
+returns boolean language sql stable security definer set search_path=''
+as $$ select exists(select 1 from public.profiles p where p.id=(select auth.uid()) and p.account_status='active'); $$;
+revoke all on function private.is_active_rivox_user() from public,anon;
+grant execute on function private.is_active_rivox_user() to authenticated;
+
+drop policy if exists "Members can view conversations" on public.conversations;
+create policy "Members can view conversations" on public.conversations for select to authenticated using(private.is_active_rivox_user() and private.is_conversation_member(id));
+drop policy if exists "Users can create conversations" on public.conversations;
+create policy "Users can create conversations" on public.conversations for insert to authenticated with check(private.is_active_rivox_user() and (select auth.uid())=created_by);
+drop policy if exists "Members can view conversation membership" on public.conversation_members;
+create policy "Members can view conversation membership" on public.conversation_members for select to authenticated using(private.is_active_rivox_user() and private.is_conversation_member(conversation_id));
+drop policy if exists "Conversation creator can add members" on public.conversation_members;
+create policy "Conversation creator can add members" on public.conversation_members for insert to authenticated with check(private.is_active_rivox_user() and exists(select 1 from public.conversations c where c.id=conversation_id and c.created_by=(select auth.uid())));
+drop policy if exists "Members can read messages" on public.messages;
+create policy "Members can read messages" on public.messages for select to authenticated using(private.is_active_rivox_user() and private.is_conversation_member(conversation_id));
+drop policy if exists "Members can send messages as themselves" on public.messages;
+drop policy if exists "Suspended users cannot send messages" on public.messages;
+drop policy if exists "Active members can send messages" on public.messages;
+create policy "Active members can send messages" on public.messages for insert to authenticated with check(private.is_active_rivox_user() and sender_id=(select auth.uid()) and private.is_conversation_member(conversation_id));
+drop policy if exists "Call participants can view their calls" on public.call_sessions;
+create policy "Call participants can view their calls" on public.call_sessions for select to authenticated using(private.is_active_rivox_user() and (caller_id=(select auth.uid()) or callee_id=(select auth.uid())));
+drop policy if exists "Conversation members can start calls" on public.call_sessions;
+create policy "Conversation members can start calls" on public.call_sessions for insert to authenticated with check(private.is_active_rivox_user() and caller_id=(select auth.uid()) and exists(select 1 from public.conversation_members cm where cm.conversation_id=call_sessions.conversation_id and cm.user_id=(select auth.uid())) and exists(select 1 from public.conversation_members cm where cm.conversation_id=call_sessions.conversation_id and cm.user_id=callee_id));
+drop policy if exists "Call participants can update call signaling" on public.call_sessions;
+create policy "Call participants can update call signaling" on public.call_sessions for update to authenticated using(private.is_active_rivox_user() and (caller_id=(select auth.uid()) or callee_id=(select auth.uid()))) with check(private.is_active_rivox_user() and (caller_id=(select auth.uid()) or callee_id=(select auth.uid())));
